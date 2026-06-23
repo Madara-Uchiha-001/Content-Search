@@ -55,15 +55,97 @@ Test in Telegram:
 
 ---
 
-## 3. Deploying to Render (free tier) + UptimeRobot
+## 3. Deploying to PythonAnywhere (free tier, no credit card)
 
-Render's free tier only runs **web services** — processes that bind to a
-port and respond to HTTP — for free. It does not offer a free always-on
-background worker. That's why this bot includes a tiny Flask server that
-runs alongside the actual Telegram polling loop, just so Render has a port
-to see and a URL to serve. The Flask server doesn't do anything related to
-search — it's purely there to satisfy Render's free-tier requirements and
-give UptimeRobot something to ping.
+PythonAnywhere's free tier doesn't include a true always-on background
+worker — that's a paid feature. The practical workaround: run the bot in a
+**Bash console** and leave it open. Since the bot is mostly idle while
+waiting for Telegram messages (long-polling), this works reasonably well
+for low-traffic channels, though it's not a guaranteed 24/7 SLA — the
+console can get killed after extended inactivity and may need a restart.
+
+### Step 1: Sign up
+Go to [pythonanywhere.com](https://www.pythonanywhere.com) → **Pricing &
+signup** → choose the **Beginner (free)** account. No card required.
+
+### Step 2: Upload your code
+Easiest option — no git config needed:
+1. Go to the **Files** tab in your PythonAnywhere dashboard
+2. Create a new directory, e.g. `telegram-search-bot`
+3. Upload `bot.py`, `database.py`, and `requirements.txt` into it
+   (drag-and-drop or the upload button)
+
+Alternatively, if you'd rather pull from GitHub:
+1. Open a **Bash console** from the dashboard
+2. Run: `git clone <your-repo-url>`
+
+### Step 3: Install dependencies
+In a Bash console, navigate into your project folder and run:
+```bash
+cd telegram-search-bot
+pip3.10 install --user -r requirements.txt
+```
+(Use whichever Python version is shown as default in your console —
+check with `python3 --version` if unsure.)
+
+### Step 4: Set environment variables
+PythonAnywhere doesn't have a dashboard env-var UI on the free tier the
+same way Render/Railway do. Instead, set them directly in the same
+console session before running the bot:
+```bash
+export BOT_TOKEN="your_botfather_token_here"
+export ADMIN_IDS="123456789,987654321"
+```
+Note: these only last for that console session. You'll need to re-export
+them each time you start a fresh console (or add them to a small shell
+script you source each time — see the tip at the end of this section).
+
+### Step 5: Run the bot
+```bash
+python3.10 bot.py
+```
+You should see "Bot starting..." in the console with no errors. Leave
+this console tab open — closing it stops the bot. Test in Telegram with
+`/start` and `/search`.
+
+### Step 6: Keep it running
+This is the real limitation of the free tier. A few practical tips:
+- Don't close the browser tab with the console open while you need the
+  bot live.
+- If the console gets killed due to inactivity, just re-run the export
+  commands and `python3.10 bot.py` again.
+- To save retyping the export commands each time, create a file
+  `start.sh` in your project folder:
+  ```bash
+  #!/bin/bash
+  export BOT_TOKEN="your_botfather_token_here"
+  export ADMIN_IDS="123456789,987654321"
+  python3.10 bot.py
+  ```
+  Then just run `bash start.sh` each time instead of typing exports
+  manually. **Do not commit this file to GitHub** — it has your real
+  token in it. Keep it only on PythonAnywhere's filesystem.
+- Set a reminder for yourself (or your client) to check the bot is still
+  responding once a day or so until you upgrade to a paid host.
+
+### When you're ready to upgrade
+Once a client is paying you, move that bot to Railway Hobby ($5/mo) or
+Render's paid tier — both now payable via UPI cards if you don't have a
+traditional credit card. This gets you genuine always-on hosting without
+the manual console-babysitting above. The bot code itself (`bot.py`,
+`database.py`) doesn't need to change for this — only the deployment
+steps differ, since `PORT` being set automatically switches on the
+keep-alive server needed for Render (see section below), and Railway
+doesn't need it at all.
+
+---
+
+## 4. Deploying to Render (free tier) + UptimeRobot
+
+This is the alternative path if you get card access later (a friend's
+card for verification, or your own once you have one) — Render also
+requires a card on file even for the free instance type, per recent
+reports.
 
 ### Step 1: Push to GitHub
 Push this folder to a new GitHub repo (one repo per client, your call on
@@ -130,7 +212,7 @@ Options to handle this:
 
 ---
 
-## 4. Handing off to a client
+## 5. Handing off to a client
 
 Each client gets:
 - Their own bot (separate BotFather token)
@@ -146,8 +228,13 @@ What you tell the client:
 
 ---
 
-## 5. Known limitations (be upfront with clients about these)
+## 6. Known limitations (be upfront with clients about these)
 
+- **PythonAnywhere free tier needs manual restarts.** Unlike Railway or
+  Render, there's no automatic redeploy/restart on crash — if the console
+  session dies, someone has to manually re-run `bash start.sh`. Set
+  expectations with early clients accordingly; this is a stopgap until
+  you move to paid hosting.
 - Search is word-overlap based, not true fuzzy matching — typos may not
   match. Good enough for short titles; for very large catalogs (500+
   entries) consider upgrading to a fuzzy library like `rapidfuzz` later.
