@@ -251,11 +251,12 @@ async def add_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     return ConversationHandler.END
 
 
-# ---------- Keep-alive web server (for Render free tier + UptimeRobot) ----------
+# ---------- Keep-alive web server (only needed for Render free tier + UptimeRobot) ----------
 # Render's free tier only runs "web services" that bind to a port — it doesn't
-# offer a free always-on worker process. So we run a tiny Flask app alongside
-# the bot's polling loop just to give Render (and UptimeRobot) something to ping.
-# This does NOT make the bot a webhook bot — it still uses polling internally.
+# offer a free always-on worker process. So on Render we run a tiny Flask app
+# alongside the bot's polling loop just to give Render (and UptimeRobot)
+# something to ping. This is skipped automatically on hosts like PythonAnywhere
+# where it isn't needed and there's no PORT env var set.
 
 keep_alive_app = Flask(__name__)
 
@@ -267,7 +268,6 @@ def keep_alive_ping():
 
 def run_keep_alive_server():
     port = int(os.environ.get("PORT", 10000))
-    # use_reloader=False and debug=False since this runs in a background thread
     keep_alive_app.run(host="0.0.0.0", port=port, debug=False, use_reloader=False)
 
 
@@ -283,10 +283,14 @@ def main():
 
     database.init_db()
 
-    # Start the keep-alive web server in a background thread so Render sees
-    # an open port and UptimeRobot has something to ping every few minutes.
-    keep_alive_thread = threading.Thread(target=run_keep_alive_server, daemon=True)
-    keep_alive_thread.start()
+    # Only start the keep-alive web server if PORT is set (Render sets this
+    # automatically). On PythonAnywhere or local runs, this is skipped.
+    if os.environ.get("PORT"):
+        keep_alive_thread = threading.Thread(target=run_keep_alive_server, daemon=True)
+        keep_alive_thread.start()
+        logger.info("Keep-alive server started (PORT detected — Render mode).")
+    else:
+        logger.info("No PORT set — skipping keep-alive server (PythonAnywhere/local mode).")
 
     app = Application.builder().token(BOT_TOKEN).build()
 
